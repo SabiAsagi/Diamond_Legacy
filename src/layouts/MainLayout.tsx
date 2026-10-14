@@ -6,7 +6,7 @@ const Sidebar = () => (
   <aside className="sidebar">
     <div className="sidebar-header">
       <Trophy size={32} color="var(--accent)" />
-      Diamond GM
+      Diamond Legacy
     </div>
     <nav className="nav-links">
       <NavLink to="/management" end className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
@@ -21,6 +21,7 @@ const Sidebar = () => (
         <Trophy size={20} />
         리그 순위
       </NavLink>
+      <NavLink to="/management/office" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}><Users size={20} />구단 운영실</NavLink>
       <div style={{ flex: 1 }}></div>
       <NavLink to="/" className="nav-item" style={{ marginTop: 'auto', marginBottom: '16px' }}>
         <Home size={20} />

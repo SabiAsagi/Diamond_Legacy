@@ -2,14 +2,12 @@ import { create } from 'zustand';
 import type { Team, Player, LeagueSeason } from '../types';
 import type { TeamStandingRow, InGameMatchState, TacticalOffenseCommand, TacticalDefenseCommand } from '../types/proManagement';
 import { db, initDummyDataIfNeeded } from '../db';
-import { getProFixtures } from '../data/proSchedule';
 import { isGraduatedCareer, prepareGMWorld, validateGMName } from '../data/gmWorld';
-import { 
-  initInGameMatch, 
-  simulateAtBat, 
-  quickSimulateMatch, 
-  type BoxscoreRecord 
-} from './proSimulation';
+import { initInGameMatch, simulateAtBat } from './gmMatch';
+import type { BoxscoreRecord } from './proSimulation';
+import { applyGMCommand, type GMCommand, selectGameRoster } from '../data/gmOperations';
+import { initializeOrganization, ensureDraftClass } from '../data/gmOrganization';
+import { advanceGMDay, gmFixtures } from '../data/gmSeason';
 
 export interface ProLeagueState {
   teams: Team[];
@@ -21,6 +19,9 @@ export interface ProLeagueState {
   recentBoxscores: BoxscoreRecord[];
   inGameMatch: InGameMatchState | null;
   isLoading: boolean;
+  livePlayers: Player[] | null;
+  initializeGM: () => Promise<void>;
+  command: (command:GMCommand) => Promise<void>;
   currentDateStr: string;
 
   // Actions
@@ -107,9 +108,11 @@ export const useProLeagueStore = create<ProLeagueState>((set, get) => ({
   recentBoxscores: [],
   inGameMatch: null,
   isLoading: false,
+  livePlayers: null,
   currentDateStr: '2026-03-28',
 
   loadLeague: async () => {
+    if(get().isLoading || get().inGameMatch) return;
     set({ isLoading: true });
     try {
       await initDummyDataIfNeeded();
@@ -140,6 +143,7 @@ export const useProLeagueStore = create<ProLeagueState>((set, get) => ({
         careerCandidates:allPlayers.filter(isGraduatedCareer),
         draftProspects:allPlayers.filter(p => p.status === 'DraftProspect'),
         season,
+        recentBoxscores:[...(season.office?.results??[])].reverse().slice(0,30),
         standings,
         currentDateStr: season.currentDate ?? '2026-03-28',
       });
@@ -170,7 +174,7 @@ export const useProLeagueStore = create<ProLeagueState>((set, get) => ({
 
   setUserTeam: async (teamId: number) => {
     const { season } = get();
-    if (!season) return;
+    if (!season || get().isLoading || get().inGameMatch) return;
     const updated = { ...season, userTeamId: teamId };
     await db.leagueSeasons.put(updated);
     set({ season: updated });
@@ -205,185 +209,117 @@ export const useProLeagueStore = create<ProLeagueState>((set, get) => ({
     } finally {set({isLoading:false});}
   },
 
-  simulateDay: async () => {
-    const { teams, players, season, currentDateStr, isLoading } = get();
-    if (isLoading || !season?.setupCompleted) return;
-
-    set({ isLoading: true });
+  initializeGM: async () => {
+    if(get().isLoading || get().inGameMatch || !get().season?.setupCompleted || get().season?.office?.initialized)return;
+    set({isLoading:true});
     try {
-      const allFixtures = getProFixtures(season.year);
-      const todayFixtures = allFixtures.filter(f => f.date === currentDateStr && !f.cancelled);
-      const newBoxscores: BoxscoreRecord[] = [];
-
-      for (const fixture of todayFixtures) {
-        const homeTeam = teams.find(t => t.code === fixture.home) || teams.find(t => t.name.includes(fixture.home)) || teams[0];
-        const awayTeam = teams.find(t => t.code === fixture.away) || teams.find(t => t.name.includes(fixture.away)) || teams[1];
-        const homePlayers = players.filter(p => p.teamId === homeTeam.id);
-        const awayPlayers = players.filter(p => p.teamId === awayTeam.id);
-
-        const matchId = `${fixture.date}_${fixture.away}_${fixture.home}`;
-        const boxscore = quickSimulateMatch(matchId, fixture.date, homeTeam, awayTeam, homePlayers, awayPlayers);
-        newBoxscores.push(boxscore);
-      }
-
-      // 다음 경기 일자로 이동
-      const futureDates = [...new Set(allFixtures.map(f => f.date).filter(d => d > currentDateStr))].sort();
-      const nextDate = futureDates[0] ?? currentDateStr;
-
-      const updatedSeason = { ...season, currentDate: nextDate };
-      await db.leagueSeasons.put(updatedSeason);
-      await db.teams.bulkPut(teams);
-      await db.players.bulkPut(players);
-
-      const standings = computeStandings(teams, players);
-      set({
-        teams: [...teams],
-        players: [...players],
-        season: updatedSeason,
-        currentDateStr: nextDate,
-        standings,
-        recentBoxscores: [...newBoxscores, ...get().recentBoxscores].slice(0, 30),
+      const result=await db.transaction('rw',db.teams,db.players,db.leagueSeasons,async()=>{
+        const all=await db.players.toArray();
+        const world={teams:structuredClone(get().teams),players:all.filter(p=>['Pro','DraftProspect'].includes(p.status)),season:structuredClone(get().season!)};
+        initializeOrganization(world.teams,world.players,world.season,Math.max(0,...all.map(p=>p.id??0))+1);
+        await persistWorld(world);return world;
       });
-    } finally {
-      set({ isLoading: false });
+      setWorld(set,result);
+    } finally {set({isLoading:false});}
+  },
+  command: async (command) => {
+    if(get().isLoading || get().inGameMatch) throw new Error('경기 또는 저장이 끝난 뒤 진행해주세요.');
+    await get().initializeGM();
+    set({isLoading:true});
+    try {
+      const result=await db.transaction('rw',db.teams,db.players,db.leagueSeasons,async()=>{
+        const all=await db.players.toArray();
+        const world=applyGMCommand({teams:get().teams,players:all.filter(p=>['Pro','DraftProspect'].includes(p.status)),season:get().season!},command);
+        if(command.type==='nextSeason') {
+          ensureDraftClass(world.teams,world.players,world.season.year,Math.max(0,...all.map(p=>p.id??0))+1);
+          // AI renews available players within budget. User contracts stay under manual control.
+          for(const t of world.teams.filter(t=>t.id!==world.season.userTeamId)){
+            const expired=world.players.filter(p=>p.teamId===undefined&&!p.gm?.futuresTeamId&&p.status==='Pro').sort((a,b)=>b.overall-a.overall);
+            let spent=world.players.filter(p=>p.teamId===t.id&&p.status==='Pro').reduce((n,p)=>n+(p.salary??5000)*10000,0);
+            for(const p of expired){if(world.players.filter(p=>p.teamId===t.id&&p.status==='Pro').length>=45)break;const salary=Math.max(3000,(p.overall-35)**2*25);if(spent+salary*10000<=t.budget){p.teamId=t.id;p.salary=Math.round(salary);p.contractYears=2;p.rosterTier='2군';spent+=salary*10000;}}
+          }
+        }
+        await persistWorld(world);return world;
+      });
+      setWorld(set,result);
+    }finally{set({isLoading:false});}
+  },
+  simulateDay: async () => {
+    if(get().isLoading || get().inGameMatch || !get().season?.setupCompleted)return;
+    await get().initializeGM();
+    set({isLoading:true});
+    try {
+      const result=await db.transaction('rw',db.teams,db.players,db.leagueSeasons,async()=>{
+        const world={teams:structuredClone(get().teams),players:structuredClone([...get().players,...get().draftProspects]),season:structuredClone(get().season!)};
+        advanceGMDay(world.teams,world.players,world.season);
+        await persistWorld(world);return world;
+      });
+      setWorld(set,result);
+    }finally{set({isLoading:false});}
+  },
+  simulateDays: async (count) => {
+    for(let i=0;i<Math.min(366,Math.max(0,count));i++){
+      const before=get().currentDateStr;
+      if(['Draft','Offseason'].includes(get().season?.currentStage??''))break;
+      await get().simulateDay();if(get().currentDateStr===before)break;
     }
   },
-
-  simulateDays: async (count: number) => {
-    for (let i = 0; i < count; i++) {
-      await get().simulateDay();
-    }
-  },
-
   simulateToNextUserMatch: async () => {
-    const { season } = get();
-    if (!season) return;
-    const userTeam = get().teams.find(t => t.id === season.userTeamId);
-    if (!userTeam) return;
-
-    for (let step = 0; step < 10; step++) {
-      const curDate = get().currentDateStr;
-      const fixtures = getProFixtures(season.year).filter(f => f.date === curDate && !f.cancelled);
-      const hasUserMatch = fixtures.some(f => f.home === userTeam.code || f.away === userTeam.code);
-      if (hasUserMatch && step > 0) break;
-      await get().simulateDay();
+    const team=get().teams.find(t=>t.id===get().season?.userTeamId);if(!team)return;
+    for(let i=0;i<366;i++){
+      if(['Draft','Offseason'].includes(get().season?.currentStage??''))return;
+      const before=get().currentDateStr;await get().simulateDay();if(get().currentDateStr===before)return;
+      if(gmFixtures(get().season!).some(f=>f.home===team.code||f.away===team.code||f.home===String(team.id)||f.away===String(team.id)))return;
     }
   },
-
   startInGameMatch: () => {
-    const { teams, players, season, currentDateStr } = get();
-    if (!season?.setupCompleted || get().isLoading) return;
-    const userTeam = teams.find(t => t.id === season.userTeamId) || teams[0];
-    const fixtures = getProFixtures(season.year).filter(f => f.date === currentDateStr && !f.cancelled);
-    const userFixture = fixtures.find(f => f.home === userTeam.code || f.away === userTeam.code) || fixtures[0];
-
-    if (!userFixture) {
-      alert('오늘은 경기가 없습니다. [하루 진행]을 눌러 다음 일정으로 이동하세요.');
-      return;
-    }
-
-    const homeTeam = teams.find(t => t.code === userFixture.home) || teams[0];
-    const awayTeam = teams.find(t => t.code === userFixture.away) || teams[1];
-    const homePlayers = players.filter(p => p.teamId === homeTeam.id);
-    const awayPlayers = players.filter(p => p.teamId === awayTeam.id);
-
-    const matchId = `${userFixture.date}_${userFixture.away}_${userFixture.home}`;
-    const inGame = initInGameMatch(matchId, currentDateStr, homeTeam, awayTeam, homePlayers, awayPlayers);
-    set({ inGameMatch: inGame });
+    const {teams,players,season,isLoading,currentDateStr,inGameMatch}=get();
+    if(isLoading||inGameMatch||!season?.setupCompleted)return;
+    if(!season.office?.initialized)throw new Error('먼저 운영실에서 선수단 준비를 완료해주세요.');
+    const user=teams.find(t=>t.id===season.userTeamId)!;
+    const f=gmFixtures(season).find(f=>f.home===user.code||f.away===user.code||f.home===String(user.id)||f.away===String(user.id));
+    if(!f)throw new Error('오늘 우리 구단 경기가 없습니다.');
+    const home=teams.find(t=>season.currentStage==='Playoffs'?t.id===Number(f.home):t.code===f.home)!;
+    const away=teams.find(t=>season.currentStage==='Playoffs'?t.id===Number(f.away):t.code===f.away)!;
+    const livePlayers=structuredClone(players);
+    if(season.currentStage==='Playoffs')for(const p of livePlayers)p.proStats=structuredClone(p.gm?.postseasonStats??{});
+    const hp=selectGameRoster(home,livePlayers,currentDateStr,season.dayIndex),ap=selectGameRoster(away,livePlayers,currentDateStr,season.dayIndex);
+    set({livePlayers,inGameMatch:initInGameMatch(`${f.date}_${f.away}_${f.home}`,currentDateStr,home,away,hp,ap)});
   },
-
-  executeTacticalAction: (offenseCmd, defenseCmd) => {
-    const { inGameMatch, teams, players } = get();
-    if (!inGameMatch || inGameMatch.isGameOver) return;
-
-    const homeTeam = teams.find(t => t.code === inGameMatch.homeTeamCode) || teams[0];
-    const awayTeam = teams.find(t => t.code === inGameMatch.awayTeamCode) || teams[1];
-    const homePlayers = players.filter(p => p.teamId === homeTeam.id);
-    const awayPlayers = players.filter(p => p.teamId === awayTeam.id);
-
-    const updated = simulateAtBat(inGameMatch, homePlayers, awayPlayers, offenseCmd, defenseCmd);
-    set({ inGameMatch: { ...updated } });
+  executeTacticalAction: (offense,defense) => {
+    const {inGameMatch,teams,livePlayers,season,currentDateStr}=get();if(!inGameMatch||inGameMatch.isGameOver||!livePlayers||!season)return;
+    const home=teams.find(t=>t.code===inGameMatch.homeTeamCode)!,away=teams.find(t=>t.code===inGameMatch.awayTeamCode)!;
+    const hp=selectGameRoster(home,livePlayers,currentDateStr,season.dayIndex),ap=selectGameRoster(away,livePlayers,currentDateStr,season.dayIndex);
+    set({inGameMatch:simulateAtBat(inGameMatch,hp,ap,offense,defense)});
   },
-
   stepHalfInning: () => {
-    const { inGameMatch } = get();
-    if (!inGameMatch || inGameMatch.isGameOver) return;
-    const currentInning = inGameMatch.inning;
-    const currentIsTop = inGameMatch.isTop;
-
-    while (
-      get().inGameMatch && 
-      !get().inGameMatch?.isGameOver && 
-      get().inGameMatch?.inning === currentInning && 
-      get().inGameMatch?.isTop === currentIsTop
-    ) {
-      get().executeTacticalAction();
-    }
+    const first=get().inGameMatch;if(!first)return;
+    for(let i=0;i<300;i++){const s=get().inGameMatch;if(!s||s.isGameOver||s.inning!==first.inning||s.isTop!==first.isTop)break;get().executeTacticalAction();}
   },
-
   finishLiveGameSimulate: async () => {
-    const { inGameMatch } = get();
-    if (!inGameMatch) return;
-
-    while (get().inGameMatch && !get().inGameMatch?.isGameOver) {
-      get().executeTacticalAction();
-    }
+    for(let i=0;i<1500;i++){if(!get().inGameMatch||get().inGameMatch?.isGameOver)break;get().executeTacticalAction();}
   },
-
   closeLiveGame: async () => {
-    const { inGameMatch, teams, players, season } = get();
-    if (!inGameMatch || !season) {
-      set({ inGameMatch: null });
-      return;
-    }
-
-    // 경기 결과를 팀 전적에 반영
-    const homeTeam = teams.find(t => t.code === inGameMatch.homeTeamCode);
-    const awayTeam = teams.find(t => t.code === inGameMatch.awayTeamCode);
-
-    if (homeTeam && awayTeam) {
-      if (inGameMatch.homeScore > inGameMatch.awayScore) {
-        homeTeam.wins = (homeTeam.wins ?? 0) + 1;
-        awayTeam.losses = (awayTeam.losses ?? 0) + 1;
-      } else if (inGameMatch.awayScore > inGameMatch.homeScore) {
-        awayTeam.wins = (awayTeam.wins ?? 0) + 1;
-        homeTeam.losses = (homeTeam.losses ?? 0) + 1;
-      } else {
-        homeTeam.draws = (homeTeam.draws ?? 0) + 1;
-        awayTeam.draws = (awayTeam.draws ?? 0) + 1;
-      }
-      homeTeam.runsScored = (homeTeam.runsScored ?? 0) + inGameMatch.homeScore;
-      homeTeam.runsAllowed = (homeTeam.runsAllowed ?? 0) + inGameMatch.awayScore;
-      awayTeam.runsScored = (awayTeam.runsScored ?? 0) + inGameMatch.awayScore;
-      awayTeam.runsAllowed = (awayTeam.runsAllowed ?? 0) + inGameMatch.homeScore;
-
-      await db.teams.bulkPut(teams);
-      await db.players.bulkPut(players);
-    }
-
-    const boxscore: BoxscoreRecord = {
-      matchId: inGameMatch.matchId,
-      dateStr: inGameMatch.dateStr,
-      homeTeamName: inGameMatch.homeTeamName,
-      awayTeamName: inGameMatch.awayTeamName,
-      homeScore: inGameMatch.homeScore,
-      awayScore: inGameMatch.awayScore,
-      homeHits: inGameMatch.homeHits,
-      awayHits: inGameMatch.awayHits,
-      homeErrors: inGameMatch.homeErrors,
-      awayErrors: inGameMatch.awayErrors,
-      winningPitcher: inGameMatch.homeScore > inGameMatch.awayScore ? inGameMatch.homeTeamName : inGameMatch.awayTeamName,
-      mvp: inGameMatch.currentBatter?.name,
-    };
-
-    const standings = computeStandings(teams, players);
-    set({
-      inGameMatch: null,
-      standings,
-      recentBoxscores: [boxscore, ...get().recentBoxscores].slice(0, 30),
-    });
-
-    // 오늘 다른 구단들의 경기들도 함께 시뮬레이션
-    await get().simulateDay();
+    const {inGameMatch,livePlayers,isLoading}=get();if(isLoading||!inGameMatch||!livePlayers)return;
+    if(!inGameMatch.isGameOver)throw new Error('경기를 마친 뒤 결과를 확정해주세요.');
+    set({isLoading:true});
+    try {
+      const result=await db.transaction('rw',db.teams,db.players,db.leagueSeasons,async()=>{
+        const world={teams:structuredClone(get().teams),players:structuredClone([...livePlayers,...get().draftProspects]),season:structuredClone(get().season!)};
+        advanceGMDay(world.teams,world.players,world.season,inGameMatch,get().players);
+        await persistWorld(world);return world;
+      });
+      setWorld(set,result);set({inGameMatch:null,livePlayers:null});
+    }finally{set({isLoading:false});}
   },
 }));
+
+async function persistWorld(world:{teams:Team[];players:Player[];season:LeagueSeason}) {
+  for(const t of world.teams)await db.teams.put(t);
+  for(const p of world.players)await db.players.put(p);
+  await db.leagueSeasons.put(world.season);
+}
+function setWorld(set:(state:Partial<ProLeagueState>)=>void,world:{teams:Team[];players:Player[];season:LeagueSeason}) {
+  const players=world.players.filter(p=>p.status==='Pro');
+  set({teams:world.teams,players,draftProspects:world.players.filter(p=>p.status==='DraftProspect'),season:world.season,currentDateStr:world.season.currentDate!,standings:computeStandings(world.teams,players),recentBoxscores:[...(world.season.office?.results??[])].reverse().slice(0,30)});
+}

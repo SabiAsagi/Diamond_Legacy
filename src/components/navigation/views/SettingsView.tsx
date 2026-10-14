@@ -54,7 +54,7 @@ export function SettingsView({ player }: SettingsViewProps) {
     finally { useGameClockStore.setState({ isLoading: false }); }
   };
   return <div className="menu-view-container glass-panel animate-scale-up">
-    <div className="menu-view-header"><div className="menu-view-title-group"><Settings size={22} /><div><h3 className="menu-view-title">환경설정 & 데이터 관리</h3><p className="menu-view-sub">Diamond GM {GAME_VERSION} · 현재 선수의 진행 기록</p></div></div></div>
+    <div className="menu-view-header"><div className="menu-view-title-group"><Settings size={22} /><div><h3 className="menu-view-title">환경설정 & 데이터 관리</h3><p className="menu-view-sub">Diamond Legacy {GAME_VERSION} · 현재 선수의 진행 기록</p></div></div></div>
     <div className="menu-view-body"><div className="settings-sections-stack">
       <section className="settings-section glass-panel"><h4 className="setting-sec-title"><Database size={16} /> 저장과 진행 기록</h4>
         <div className="setting-row"><div className="setting-label-group"><strong>브라우저 자동 저장</strong><span>활동·경기·목표·인연 변경이 저장되면 다음 진행에 반영됩니다.</span></div><span className="save-status-badge">{isLoading ? '저장 중…' : '자동 저장 사용'}</span></div>

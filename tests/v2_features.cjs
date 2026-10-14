@@ -589,6 +589,114 @@ function gmMemory(initial) {
 const gmWorld=require(path.join(dir,'data/gmWorld.js'));
 const gmCareer=()=>normalizePlayer({id:7,name:'연결 선수',gender:'female',age:19,position:'SS',highSchool:'덕수고',status:'HighSchool',overall:55,academics:60,relationships:{...INITIAL_RELATIONSHIPS},careerEndedAt:'2029-03-01',gameDate:{year:2029,month:3,day:1,weekday:4,grade:3},matchRecords:[{matchId:'졸업 경기'}],careerJourney:{met:['mother','father'],completedScenes:[],trainingGrowth:{contact:9},offers:['professional'],ending:{route:'professional',title:'프로',text:'기록',overall:55,appearances:20}}});
 
+const gmOps=require(path.join(dir,'data/gmOperations.js'));
+const gmOrg=require(path.join(dir,'data/gmOrganization.js'));
+const gmSeason=require(path.join(dir,'data/gmSeason.js'));
+const gmMatch=require(path.join(dir,'store/gmMatch.js'));
+function operationsWorld(){
+  const {buildDefaultProTeams,buildDefaultProPlayers}=require(path.join(dir,'data/proClubs.js'));
+  const teams=buildDefaultProTeams(),players=buildDefaultProPlayers(teams),season={id:1,year:2026,currentDate:'2026-03-28',currentStage:'RegularSeason',setupCompleted:true,userTeamId:1,dayIndex:0};
+  gmOrg.initializeOrganization(teams,players,season,Math.max(...players.map(p=>p.id))+1);
+  return {teams,players,season};
+}
+test('GM 조직은 1군 10팀·퓨처스 12팀·북남 각 6팀과 121경기 일정을 구성한다',()=>{
+  const w=operationsWorld(),clubs=w.season.office.futuresTeams;
+  assert.equal(w.teams.length,10);assert.equal(clubs.length,12);
+  assert.equal(clubs.filter(t=>t.division==='북부').length,6);assert.ok(clubs.some(t=>t.name==='상무'));assert.ok(clubs.some(t=>t.name==='울산 웨일즈'));
+  const fixtures=gmSeason.futuresSchedule(2026,clubs);assert.equal(fixtures.length,726);
+  for(const t of clubs)assert.equal(fixtures.filter(f=>f.home===t.id||f.away===t.id).length,121);
+  for(const f of fixtures)assert.notEqual(new Date(f.date+'T12:00:00Z').getUTCDay(),2);
+  for(const t of w.teams)assert.equal(w.players.filter(p=>p.teamId===t.id&&p.rosterTier==='1군').length,29);
+});
+test('GM 육성선수는 68명 정원 제외·퓨처스 출전·5월 정식 전환 후 1군 등록한다',()=>{
+  let w=operationsWorld();const p=w.players.find(p=>p.teamId===1&&p.gm?.registration==='development');
+  assert.ok(p);assert.ok(!gmOps.activePlayers(w.players,1,w.season.currentDate).some(x=>x.id===p.id));
+  assert.throws(()=>gmOps.applyGMCommand(w,{type:'roster',playerId:p.id,tier:'1군'}),/정식/);
+  assert.throws(()=>gmOps.applyGMCommand(w,{type:'registerDevelopment',playerId:p.id}),/5월/);
+  w.season.currentDate='2026-05-01';w=gmOps.applyGMCommand(w,{type:'registerDevelopment',playerId:p.id});
+  assert.equal(w.players.find(x=>x.id===p.id).gm.registration,'registered');
+  assert.equal(gmOps.minimumSalary(2027),3300);
+  const before=w.players.filter(x=>x.teamId===1&&x.gm?.registration!=='development').length;
+  const free=w.players.find(x=>x.teamId===undefined&&!x.gm?.futuresTeamId&&x.status==='Pro');
+  const signed=gmOps.applyGMCommand(w,{type:'contract',playerId:free.id,salary:3000,years:1,development:true});
+  assert.equal(signed.players.filter(x=>x.teamId===1&&x.gm?.registration!=='development').length,before);
+  assert.equal(signed.players.find(x=>x.id===free.id).rosterTier,'2군');
+});
+test('GM 3군 이동·부상·재등록 10일 제한은 실제 출전 명단에서 제외한다',()=>{
+  const w=operationsWorld(),p=w.players.find(p=>p.teamId===1&&p.rosterTier==='1군');
+  const next=gmOps.applyGMCommand(w,{type:'roster',playerId:p.id,tier:'3군'});
+  assert.equal(w.players.find(x=>x.id===p.id).rosterTier,'1군');
+  assert.equal(next.players.find(x=>x.id===p.id).gm.recallAfter,'2026-04-07');
+  assert.ok(!gmOps.activePlayers(next.players,1,'2026-03-28').some(x=>x.id===p.id));
+  assert.throws(()=>gmOps.applyGMCommand(next,{type:'roster',playerId:p.id,tier:'1군'}),/재등록/);
+  next.season.currentDate='2026-04-07';assert.equal(gmOps.applyGMCommand(next,{type:'roster',playerId:p.id,tier:'1군'}).players.find(x=>x.id===p.id).rosterTier,'1군');
+});
+test('GM 계약·예산·방출 보장 연봉·상무 시장 제외를 검증한다',()=>{
+  const w=operationsWorld(),p=w.players.find(p=>p.teamId===undefined&&!p.gm?.futuresTeamId);
+  const signed=gmOps.applyGMCommand(w,{type:'contract',playerId:p.id,salary:gmOps.salaryDemand(p),years:3});
+  assert.equal(signed.players.find(x=>x.id===p.id).teamId,1);
+  const before=gmOps.payroll(1,signed.players,signed.season),released=gmOps.applyGMCommand(signed,{type:'release',playerId:p.id});
+  assert.equal(gmOps.payroll(1,released.players,released.season),before);
+  const poor=structuredClone(w);poor.teams[0].budget=1;assert.throws(()=>gmOps.applyGMCommand(poor,{type:'contract',playerId:p.id,salary:gmOps.salaryDemand(p),years:1}),/予算|예산/);
+  const military=w.players.find(p=>p.gm?.futuresTeamId===20001);assert.throws(()=>gmOps.applyGMCommand(w,{type:'contract',playerId:military.id,salary:100000,years:1}),/자유계약/);
+});
+test('GM 라인업 중복 및 타자·투수 혼합을 막고 타순을 실제 경기에 반영한다',()=>{
+  const w=operationsWorld(),roster=gmOps.selectGameRoster(w.teams[0],w.players,w.season.currentDate);
+  const bat=roster.filter(p=>p.position!=='P').slice(0,9).map(p=>p.id).reverse(),pit=roster.find(p=>p.position==='P').id;
+  const next=gmOps.applyGMCommand(w,{type:'lineup',lineup:bat,rotation:[pit]});
+  const r=gmOps.selectGameRoster(next.teams[0],next.players,next.season.currentDate);
+  assert.deepEqual(r.slice(0,9).map(p=>p.id),bat);
+  assert.throws(()=>gmOps.applyGMCommand(w,{type:'lineup',lineup:Array(9).fill(bat[0]),rotation:[pit]}),/서로 다른/);
+});
+test('GM 관전·자동 진행은 같은 타석 엔진을 쓰며 경기 중복 집계와 2군 기록 혼입을 막는다',()=>{
+  const w=operationsWorld(),f=gmSeason.gmFixtures(w.season).find(f=>f.home===w.teams[0].code||f.away===w.teams[0].code);
+  const home=w.teams.find(t=>t.code===f.home),away=w.teams.find(t=>t.code===f.away);
+  const hp=gmOps.selectGameRoster(home,w.players,w.season.currentDate),ap=gmOps.selectGameRoster(away,w.players,w.season.currentDate);
+  let live=gmMatch.initInGameMatch(`${f.date}_${f.away}_${f.home}`,f.date,home,away,hp,ap);
+  for(let i=0;i<1500&&!live.isGameOver;i++)live=gmMatch.simulateAtBat(live,hp,ap);
+  assert.ok(live.isGameOver);gmSeason.advanceGMDay(w.teams,w.players,w.season,live);
+  assert.equal(w.season.office.results.filter(b=>b.matchId===live.matchId).length,1);
+  for(const t of w.teams)assert.equal(t.wins+t.draws+t.losses,1);
+  for(const p of w.players.filter(p=>p.rosterTier==='2군'))assert.equal(p.proStats?.batting?.pa??0,0);
+  assert.equal(w.season.office.futuresResults.length,6);assert.equal(w.season.currentDate,'2026-03-29');
+  assert.ok(w.players.some(p=>(p.gm?.futuresStats?.batting?.pa??0)>0));
+});
+test('GM 전체 시즌→포스트시즌→11라운드 지명→다음 시즌 기록 보존을 완주한다',()=>{
+  let w=operationsWorld();
+  for(let i=0;i<300&&w.season.currentStage!=='Draft';i++){
+    gmOps.autoRoster(w.teams[0],w.players,w.season.currentDate);
+    gmSeason.advanceGMDay(w.teams,w.players,w.season);
+  }
+  assert.equal(w.season.currentStage,'Draft');assert.equal(w.season.office.series.length,4);assert.ok(w.season.office.championId);
+  const completed=w.season.office.results.length;assert.ok(completed>=720);
+  for(let i=0;i<30&&w.season.currentStage==='Draft';i++){
+    const next=w.season.office.draftOrder[w.season.office.draftPicks.length%10];
+    const p=w.players.find(p=>p.status==='DraftProspect'&&p.draftClassYear===2026);
+    w=gmOps.applyGMCommand(w,{type:'draft',playerId:next===1?p.id:undefined});
+  }
+  assert.equal(w.season.office.draftPicks.length,110);assert.equal(w.season.currentStage,'Offseason');
+  const next=gmOps.applyGMCommand(w,{type:'nextSeason'});
+  assert.equal(next.season.year,2027);assert.equal(next.season.office.results.length,0);assert.equal(next.season.office.archives.length,1);
+  assert.ok(next.players.some(p=>p.gm?.seasonHistory?.length===1));
+});
+test('GM 경기·거래 저장 실패 시 화면과 저장을 함께 보존하고 재접속에서 후보를 유지한다',async()=>{
+  const module=require(path.join(dir,'db.js')),original=module.db,w=operationsWorld();
+  const mem=gmMemory({teams:w.teams,players:[gmCareer(),...w.players],leagueSeasons:[w.season]});module.db=mem.db;
+  const {useProLeagueStore:store}=require(path.join(dir,'store/proLeagueStore.js'));
+  try{
+    store.setState({inGameMatch:null,livePlayers:null,isLoading:false});await store.getState().loadLeague();
+    const before=mem.snapshot(),date=store.getState().currentDateStr;
+    mem.fail();await assert.rejects(store.getState().simulateDay(),/GM save failed/);
+    assert.deepEqual(mem.snapshot(),before);assert.equal(store.getState().currentDateStr,date);assert.equal(store.getState().isLoading,false);
+    await store.getState().simulateDay();assert.equal(store.getState().draftProspects.length,130);
+    await store.getState().loadLeague();assert.equal(store.getState().draftProspects.length,130);assert.equal(store.getState().recentBoxscores.length,5);
+    const free=store.getState().players.find(p=>p.teamId===undefined&&!p.gm?.futuresTeamId);
+    const saved=mem.snapshot();mem.fail();await assert.rejects(store.getState().command({type:'contract',playerId:free.id,salary:gmOps.salaryDemand(free),years:1}),/GM save failed/);
+    assert.deepEqual(mem.snapshot(),saved);assert.equal(store.getState().players.find(p=>p.id===free.id).teamId,undefined);
+    assert.deepEqual(mem.snapshot().players.find(p=>p.id===7),gmCareer());
+  }finally{module.db=original;store.setState({inGameMatch:null,livePlayers:null,isLoading:false});}
+});
+
 test('GM 구단 갱신은 기존 ID·재정·전적·직접 지은 이름을 보존한다',()=>{
   const old=[{id:73,name:'Seoul Tigers',city:'Seoul',budget:123,fanBase:50,wins:9},{id:88,code:'BEARS',name:'내가 지은 구단',city:'서울',budget:456,fanBase:70}];
   const copy=structuredClone(old);

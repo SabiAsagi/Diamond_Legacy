@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
+/* Desktop builds use bundled fonts and system fallbacks; no network dependency. */
 
 @import './styles/base.css';
 @import './styles/title-screen.css';

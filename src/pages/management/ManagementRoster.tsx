@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useProLeagueStore } from '../../store/proLeagueStore';
 import type { Player } from '../../types';
-import { db } from '../../db';
+import { Link } from 'react-router-dom';
 import { Shield } from 'lucide-react';
 import './ManagementRoster.css';
 
 export default function ManagementRoster() {
-  const { teams, players, season, loadLeague } = useProLeagueStore();
+  const { teams, players, season, loadLeague, command, isLoading } = useProLeagueStore();
+  const [error,setError] = useState('');
   const [filterPos, setFilterPos] = useState<'ALL' | 'P' | 'C' | 'IF' | 'OF'>('ALL');
-  const [filterTier, setFilterTier] = useState<'ALL' | '1군' | '2군'>('ALL');
+  const [filterTier, setFilterTier] = useState<'ALL' | '1군' | '2군' | '3군'>('ALL');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
   useEffect(() => {
-    loadLeague();
+    if(!useProLeagueStore.getState().season) void loadLeague().catch(e=>setError(String(e)));
   }, [loadLeague]);
 
   const userTeam = teams.find(t => t.id === season?.userTeamId) || teams[0];
@@ -31,25 +32,24 @@ export default function ManagementRoster() {
 
   const toggleRosterTier = async (player: Player) => {
     const nextTier = (player.rosterTier ?? '1군') === '1군' ? '2군' : '1군';
-    const updated = { ...player, rosterTier: nextTier as '1군' | '2군' };
-    await db.players.put(updated);
-    await loadLeague();
-    if (selectedPlayer?.id === player.id) setSelectedPlayer(updated);
+    try { await command({type:'roster',playerId:player.id!,tier:nextTier}); setError(''); } catch(e) { setError(e instanceof Error?e.message:String(e)); }
   };
 
-  const startingPitchers = teamPlayers.filter(p => p.position === 'P' && p.pitcherRole === 'Starter').slice(0, 5);
-  const closers = teamPlayers.filter(p => p.position === 'P' && p.pitcherRole === 'Closer');
-  const coreBatters = teamPlayers.filter(p => p.position !== 'P').slice(0, 9);
+  const startingPitchers = teamPlayers.filter(p => p.position === 'P' && p.pitcherRole === 'Starter' && (p.rosterTier??'1군')==='1군').slice(0, 5);
+  const closers = teamPlayers.filter(p => p.position === 'P' && p.pitcherRole === 'Closer' && (p.rosterTier??'1군')==='1군');
+  const coreBatters = teamPlayers.filter(p => p.position !== 'P' && (p.rosterTier??'1군')==='1군').slice(0, 9);
 
   return (
     <div className="management-roster-container animate-fade-in">
+      <Link to="/management/office">라인업·계약·퓨처스·3군 관리</Link>
+      {error && <p role="alert">{error}</p>}
       {/* 상단 팀 로스터 헤더 */}
       <div className="roster-header glass-panel">
         <div className="roster-header-info">
           <Shield size={28} className="text-primary" />
           <div>
             <h1>{userTeam?.name} 선수단 로스터</h1>
-            <p>1군 28인 / 2군 육성 선수단 등록 및 선발 라인업 점검</p>
+            <p>1군 등록 29인 / 2군 육성 선수단 등록 및 선발 라인업 점검</p>
           </div>
         </div>
 
@@ -129,7 +129,7 @@ export default function ManagementRoster() {
 
         <div className="filter-group">
           <span>군 분류:</span>
-          {(['ALL', '1군', '2군'] as const).map(t => (
+          {(['ALL', '1군', '2군', '3군'] as const).map(t => (
             <button 
               key={t}
               className={`filter-btn ${filterTier === t ? 'active' : ''}`}
@@ -197,6 +197,7 @@ export default function ManagementRoster() {
                 <td>
                   <button 
                     className="btn btn-sm btn-outline"
+                    disabled={isLoading}
                     onClick={(e) => {
                       e.stopPropagation();
                       void toggleRosterTier(p);
