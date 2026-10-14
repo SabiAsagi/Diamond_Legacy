@@ -71,3 +71,114 @@ export function migrateWeekendMatches(matches: ScheduledMatch[], year: number, s
     return playedCount + future.slice(0, index).filter(k => k.leagueHalf === m.leagueHalf).length < 6;
   })];
 }
+
+export interface WeekendGroupStanding {
+  rank: number;
+  schoolId: string;
+  schoolName: string;
+  isPlayerSchool: boolean;
+  games: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  winRate: number;
+  runsScored: number;
+  runsAllowed: number;
+  runDiff: number;
+}
+
+export function getWeekendGroupStandings(
+  school: HighSchoolData,
+  schools: HighSchoolData[],
+  matches: ScheduledMatch[],
+  half: 1 | 2
+): { groupName: string; standings: WeekendGroupStanding[] } {
+  const group = getWeekendGroup(school, schools, half);
+  const playedMatches = matches.filter(
+    m => m.tournamentId === 'weekend_league' && m.leagueHalf === half && m.result
+  );
+
+  const statsMap = new Map<string, { wins: number; draws: number; losses: number; rs: number; ra: number }>();
+  for (const s of group.teams) {
+    statsMap.set(s.id, { wins: 0, draws: 0, losses: 0, rs: 0, ra: 0 });
+  }
+
+  // 1. 플레이어 학교 경기 결과 반영
+  for (const m of playedMatches) {
+    const homeStats = statsMap.get(m.homeSchoolId);
+    const awayStats = statsMap.get(m.awaySchoolId);
+    if (!homeStats || !awayStats) continue;
+
+    if (m.result === 'home') {
+      homeStats.wins++;
+      awayStats.losses++;
+      homeStats.rs += 5; homeStats.ra += 2;
+      awayStats.rs += 2; awayStats.ra += 5;
+    } else if (m.result === 'away') {
+      awayStats.wins++;
+      homeStats.losses++;
+      awayStats.rs += 5; awayStats.ra += 2;
+      homeStats.rs += 2; homeStats.ra += 5;
+    }
+  }
+
+  // 2. 다른 학교들 간의 경기 진행도 시뮬레이션
+  const myPlayedCount = playedMatches.length;
+  const otherTeams = group.teams.filter(s => s.id !== school.id);
+  const seed = (half * 100) + group.teams.length;
+  for (let i = 0; i < otherTeams.length; i++) {
+    for (let j = i + 1; j < otherTeams.length; j++) {
+      const matchIndex = (i * 3 + j);
+      if (matchIndex < myPlayedCount) {
+        const teamA = otherTeams[i];
+        const teamB = otherTeams[j];
+        const aStats = statsMap.get(teamA.id)!;
+        const bStats = statsMap.get(teamB.id)!;
+        const aWins = (matchIndex + seed + teamA.name.length) % 2 === 0;
+        if (aWins) {
+          aStats.wins++; bStats.losses++;
+          aStats.rs += 4; aStats.ra += 2;
+          bStats.rs += 2; bStats.ra += 4;
+        } else {
+          bStats.wins++; aStats.losses++;
+          bStats.rs += 4; bStats.ra += 2;
+          aStats.rs += 2; aStats.ra += 4;
+        }
+      }
+    }
+  }
+
+  const standingsList: WeekendGroupStanding[] = group.teams.map(s => {
+    const st = statsMap.get(s.id)!;
+    const games = st.wins + st.draws + st.losses;
+    const winRate = games > 0 ? Number((st.wins / games).toFixed(3)) : 0;
+    const runDiff = st.rs - st.ra;
+    return {
+      rank: 1,
+      schoolId: s.id,
+      schoolName: s.name,
+      isPlayerSchool: s.id === school.id,
+      games,
+      wins: st.wins,
+      draws: st.draws,
+      losses: st.losses,
+      winRate,
+      runsScored: st.rs,
+      runsAllowed: st.ra,
+      runDiff,
+    };
+  });
+
+  standingsList.sort((a, b) => {
+    if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    return b.runDiff - a.runDiff;
+  });
+
+  standingsList.forEach((s, idx) => { s.rank = idx + 1; });
+
+  return {
+    groupName: group.name,
+    standings: standingsList,
+  };
+}

@@ -1,6 +1,7 @@
-import { INITIAL_RELATIONSHIPS } from './types/bondScores';
 import Dexie, { type Table } from 'dexie';
 import type { Player, Team, LeagueSeason } from './types';
+import { buildDefaultProPlayers } from './data/proClubs';
+import { reconcileProTeams } from './data/gmWorld';
 
 export class DiamondGMDexie extends Dexie {
   players!: Table<Player, number>;
@@ -21,74 +22,22 @@ export const db = new DiamondGMDexie();
 
 export async function initDummyDataIfNeeded() {
   await db.transaction('rw', db.teams, db.players, db.leagueSeasons, async () => {
-  const teamCount = await db.teams.count();
-  if (teamCount === 0) {
-    await db.teams.bulkAdd([
-      { name: 'Seoul Tigers', city: 'Seoul', budget: 10000000, fanBase: 90 },
-      { name: 'Busan Gulls', city: 'Busan', budget: 8500000, fanBase: 85 },
-      { name: 'Incheon Wyverns', city: 'Incheon', budget: 7000000, fanBase: 70 }
-    ]);
-    
-    await db.players.bulkAdd([
-      {
-        name: 'Kim Min-su',
-        gender: 'male',
-        age: 18,
-        position: 'P',
-        status: 'HighSchool',
-        uniformNumber: 1,
-        highSchool: '덕수고',
-        handedness: 'R/R',
-        pitchingForm: 'Overhand',
-        pitcherRole: 'Starter',
-        battingForm: 'None',
-        overall: 20,
-        contact: 15,
-        power: 10,
-        eye: 15,
-        speed: 20,
-        defense: 20,
-        stuff: 20,
-        control: 20,
-        stamina: 20,
-        potential: 80,
-        condition: 100,
-        academics: 70,
-        relationships: {...INITIAL_RELATIONSHIPS},
-      },
-      {
-        name: 'Lee Seung-yeop',
-        gender: 'male',
-        age: 22,
-        position: '1B',
-        status: 'Pro',
-        teamId: 1, // Seoul Tigers
-        uniformNumber: 36,
-        highSchool: '경북고',
-        handedness: 'L/L',
-        pitchingForm: 'None',
-        pitcherRole: 'None',
-        battingForm: 'Open',
-        overall: 80,
-        contact: 85,
-        power: 90,
-        eye: 75,
-        speed: 40,
-        defense: 70,
-        stuff: 0,
-        control: 0,
-        stamina: 0,
-        potential: 95,
-        condition: 80,
-        academics: 50,
-        relationships: {...INITIAL_RELATIONSHIPS},
+    const existing = await db.teams.toArray();
+    const teams: Team[] = [];
+    for (const team of reconcileProTeams(existing)) {
+      if (team.id !== undefined) {
+        const previous = existing.find(t => t.id === team.id);
+        if (JSON.stringify(previous) !== JSON.stringify(team)) await db.teams.put(team);
+        teams.push(team);
+      } else {
+        const id = await db.teams.add(team);
+        teams.push({ ...team, id });
       }
-    ]);
-    
-    await db.leagueSeasons.add({
-      year: 2024,
-      currentStage: 'Offseason'
-    });
-  }
+    }
+    const players = await db.players.toArray();
+    const emptyTeams = teams.filter(t => t.code && !players.some(p => p.teamId === t.id && p.status === 'Pro'));
+    const seed = buildDefaultProPlayers(emptyTeams).map(p => ({ ...p, id:undefined }));
+    if (seed.length) await db.players.bulkAdd(seed);
+    if (await db.leagueSeasons.count() === 0) await db.leagueSeasons.add({ year:2026, currentStage:'RegularSeason', currentDate:'2026-03-28', dayIndex:0, userTeamId:teams[0]?.id, setupCompleted:false });
   });
 }

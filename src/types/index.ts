@@ -7,6 +7,7 @@ export * from './activity';
 export * from './equipment';
 export * from './outdoorMap';
 export * from './relationship';
+export * from './proManagement';
 
 import type { GameDate, TimeSlot } from './calendar';
 import type { EquipmentSlot } from './equipment';
@@ -26,7 +27,7 @@ export const POSITION_LABELS: Record<Position, string> = {
   TwoWay: '투타겸업',
 };
 
-export type PlayerStatus = 'HighSchool' | 'Pro' | 'Minor' | 'Military' | 'Retired';
+export type PlayerStatus = 'HighSchool' | 'Pro' | 'Minor' | 'Military' | 'Retired' | 'DraftProspect';
 export type Gender = 'male' | 'female';
 
 export type Handedness = 'R/R' | 'R/L' | 'L/R' | 'L/L'; // 우투우타, 우투좌타, 좌투우타, 좌투좌타
@@ -122,19 +123,58 @@ export interface Player {
   gameDate?: GameDate;
   currentSlot?: TimeSlot;
   injuryStatus?: string;
+
+  // 프로 구단 관리 & GM 모드 필드
+  proStats?: import('./proManagement').ProPlayerStats;
+  rosterTier?: '1군' | '2군';
+  salary?: number; // 연봉 (만원 단위)
+  contractYears?: number; // 잔여 계약 기간
+  draftSourceCareerId?: number;
+  draftClassYear?: number;
 }
 
 export interface Team {
+  customName?: boolean;
   id?: number;
-  name: string;
-  city: string;
-  budget: number;
-  fanBase: number; // 0-100
+  code?: string; // 'TWINS', 'BEARS', 'HEROES', 'LANDERS', 'WIZ', 'EAGLES', 'TIGERS', 'LIONS', 'GIANTS', 'DINOS'
+  name: string; // '서울 트윈스'
+  shortName?: string; // '트윈스'
+  city: string; // '서울'
+  venue?: string; // '잠실야구장'
+  budget: number; // 잔여 예산 (원)
+  payroll?: number; // 총 연봉
+  fanBase: number; // 0-100 (팬덤 / 인기도)
+  reputation?: number; // 0-100 (구단 명성)
+  primaryColor?: string;
+  secondaryColor?: string;
+  
+  // 시즌 기록 (Standings)
+  wins?: number;
+  draws?: number;
+  losses?: number;
+  runsScored?: number;
+  runsAllowed?: number;
+  streak?: string;
+  last10?: string;
+  
+  // OOTP 라인업 & 로스터 설정
+  lineup?: number[];
+  rotation?: number[];
+  bullpen?: {
+    setup?: number;
+    closer?: number;
+    middle?: number[];
+  };
 }
 
 export interface LeagueSeason {
+  setupCompleted?: boolean;
+  sourceCareerId?: number;
   id?: number;
   year: number;
+  currentDate?: string;
   currentStage: 'Offseason' | 'SpringTraining' | 'RegularSeason' | 'Playoffs' | 'Draft';
+  dayIndex?: number;
+  userTeamId?: number;
 }
 

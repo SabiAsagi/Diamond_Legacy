@@ -10,7 +10,11 @@ function compile(folder) {
   for (const item of fs.readdirSync(folder, { withFileTypes: true })) {
     const file = path.join(folder, item.name);
     if (item.isDirectory()) compile(file);
-    else if (file.endsWith('.ts') || file.endsWith('.tsx')) {
+    else if (file.endsWith('.json')) {
+      const target = path.join(dir, path.relative(path.resolve('src'), file));
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(file, target);
+    } else if (file.endsWith('.ts') || file.endsWith('.tsx')) {
       const target = path.join(dir, path.relative(path.resolve('src'), file).replace(/\.tsx?$/, '.js'));
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(
@@ -473,4 +477,216 @@ test('완성 원화는512×768이며 투명 배경을 유지한다', async () =>
     const meta = await sharp('public/' + getSchoolPortraitSrc('서울고', preset.id)).metadata();
     assert.equal(meta.width, 512); assert.equal(meta.height, 768); assert.ok(meta.hasAlpha);
   }
+});
+
+test('세이브 파일 내보내기 및 복원(parseSaveExport) 무결성을 검증한다', () => {
+  const { createSaveExport, parseSaveExport } = require(path.join(dir, 'data/saveExport.js'));
+  const samplePlayer = { name: '홍길동', highSchool: '덕수고', position: 'P', overall: 60 };
+  const jsonStr = createSaveExport(samplePlayer, '2.1.1');
+  const restored = parseSaveExport(jsonStr);
+  assert.equal(restored.name, '홍길동');
+  assert.equal(restored.highSchool, '덕수고');
+  assert.throws(() => parseSaveExport('{}'), /선수 필수 정보/);
+  assert.throws(() => parseSaveExport('not json'), /올바른 JSON 파일 형식/);
+});
+
+test('KBO 라이선스 회피를 위한 10개 프로 구단 및 가상 선수 생성을 검증한다', () => {
+  const { buildDefaultProTeams, buildDefaultProPlayers, INITIAL_CLUBS_META } = require(path.join(dir, 'data/proClubs.js'));
+  assert.equal(INITIAL_CLUBS_META.length, 10);
+  const teams = buildDefaultProTeams();
+  assert.equal(teams.length, 10);
+  // 기업명(LG, 두산, 삼성 등) 대신 도시 연고지 기반 명칭 확인
+  assert.ok(teams.some(t => t.name === '서울 듀오스'));
+  assert.ok(teams.some(t => t.name === '부산 샤크즈'));
+  assert.ok(teams.some(t => t.name === '광주 재규어스'));
+  assert.ok(teams.some(t => t.name === '대전 호크스'));
+
+  const players = buildDefaultProPlayers(teams);
+  assert.ok(players.length >= 100);
+  assert.ok(players.every(p => p.status === 'Pro' && p.teamId !== undefined));
+  assert.ok(players.every(p => p.proStats && p.proStats.batting && p.proStats.pitching));
+});
+
+test('프로 경기 자동 시뮬레이션 및 KBO 스타일 순위표 계산을 검증한다', () => {
+  const { buildDefaultProTeams, buildDefaultProPlayers } = require(path.join(dir, 'data/proClubs.js'));
+  const { quickSimulateMatch } = require(path.join(dir, 'store/proSimulation.js'));
+  const { computeStandings } = require(path.join(dir, 'store/proLeagueStore.js'));
+
+  const teams = buildDefaultProTeams();
+  const players = buildDefaultProPlayers(teams);
+
+  const home = teams[0];
+  const away = teams[1];
+  const homePlayers = players.filter(p => p.teamId === home.id);
+  const awayPlayers = players.filter(p => p.teamId === away.id);
+
+  const boxscore = quickSimulateMatch('2026-03-28_TWINS_BEARS', '2026-03-28', home, away, homePlayers, awayPlayers);
+  assert.ok(boxscore.homeScore >= 0);
+  assert.ok(boxscore.awayScore >= 0);
+  assert.ok(boxscore.mvp);
+
+  const standings = computeStandings(teams, players);
+  assert.equal(standings.length, 10);
+  assert.equal(standings[0].rank, 1);
+  assert.ok(standings.every(s => typeof s.winRate === 'number' && typeof s.gamesBehind === 'number'));
+});
+
+test('OOTP 스타일 경기 타석 시뮬레이션 및 전술 개입(번트, 도루)을 검증한다', () => {
+  const { buildDefaultProTeams, buildDefaultProPlayers } = require(path.join(dir, 'data/proClubs.js'));
+  const { initInGameMatch, simulateAtBat } = require(path.join(dir, 'store/proSimulation.js'));
+
+  const teams = buildDefaultProTeams();
+  const players = buildDefaultProPlayers(teams);
+  const home = teams[0];
+  const away = teams[1];
+  const homePlayers = players.filter(p => p.teamId === home.id);
+  const awayPlayers = players.filter(p => p.teamId === away.id);
+
+  const state = initInGameMatch('test_match', '2026-03-28', home, away, homePlayers, awayPlayers);
+  assert.equal(state.inning, 1);
+  assert.equal(state.outs, 0);
+
+  // 일반 타석 진행
+  const next1 = simulateAtBat(state, homePlayers, awayPlayers);
+  assert.ok(next1.playLogs.length >= 2);
+
+  // 1루 주자 도루 시도 테스트
+  state.bases[0] = true;
+  state.runners[0] = '발빠른주자';
+  const nextSteal = simulateAtBat(state, homePlayers, awayPlayers, 'steal');
+  assert.ok(nextSteal.playLogs.some(l => l.text.includes('도루')));
+});
+
+test('고교야구 주말리그 조별 순위표(getWeekendGroupStandings)를 계산한다', () => {
+  const { getWeekendGroupStandings } = require(path.join(dir, 'data/weekendLeague.js'));
+  const school = HIGH_SCHOOLS_DATA.find(s => s.name === '덕수고') || HIGH_SCHOOLS_DATA[0];
+  const { groupName, standings } = getWeekendGroupStandings(school, HIGH_SCHOOLS_DATA, [], 1);
+  assert.ok(groupName.length > 0);
+  assert.ok(standings.length >= 2);
+  assert.ok(standings.some(s => s.isPlayerSchool));
+  assert.equal(standings[0].rank, 1);
+});
+
+// GM world tests use a separate in-memory database, never the user's browser save.
+function gmMemory(initial) {
+  let state=structuredClone(initial);
+  let fail=false;
+  const db={};
+  for(const key of ['teams','players','leagueSeasons']) {
+    db[key]={
+      toArray:async()=>structuredClone(state[key]),
+      count:async()=>state[key].length,
+      get:async id=>structuredClone(state[key].find(x=>x.id===id)),
+      toCollection:()=>({first:async()=>structuredClone(state[key][0])}),
+      put:async row=>{ if(fail&&key==='leagueSeasons'){fail=false;throw Error('GM save failed');} const i=state[key].findIndex(x=>x.id===row.id); if(i<0)state[key].push(structuredClone(row));else state[key][i]=structuredClone(row);return row.id;},
+      add:async row=>{const id=Math.max(0,...state[key].map(x=>x.id??0))+1;state[key].push(structuredClone({...row,id}));return id;},
+      bulkAdd:async rows=>{for(const row of rows)await db[key].add(row);},
+    };
+  }
+  db.transaction=async (...args)=>{const before=structuredClone(state);try{return await args.at(-1)();}catch(e){state=before;throw e;}};
+  return {db,snapshot:()=>structuredClone(state),fail:()=>{fail=true;}};
+}
+const gmWorld=require(path.join(dir,'data/gmWorld.js'));
+const gmCareer=()=>normalizePlayer({id:7,name:'연결 선수',gender:'female',age:19,position:'SS',highSchool:'덕수고',status:'HighSchool',overall:55,academics:60,relationships:{...INITIAL_RELATIONSHIPS},careerEndedAt:'2029-03-01',gameDate:{year:2029,month:3,day:1,weekday:4,grade:3},matchRecords:[{matchId:'졸업 경기'}],careerJourney:{met:['mother','father'],completedScenes:[],trainingGrowth:{contact:9},offers:['professional'],ending:{route:'professional',title:'프로',text:'기록',overall:55,appearances:20}}});
+
+test('GM 구단 갱신은 기존 ID·재정·전적·직접 지은 이름을 보존한다',()=>{
+  const old=[{id:73,name:'Seoul Tigers',city:'Seoul',budget:123,fanBase:50,wins:9},{id:88,code:'BEARS',name:'내가 지은 구단',city:'서울',budget:456,fanBase:70}];
+  const copy=structuredClone(old);
+  const out=gmWorld.reconcileProTeams(old);
+  assert.deepEqual(old,copy);
+  const legacy=out.find(t=>t.id===73);
+  assert.equal(legacy.code,'TIGERS');assert.equal(legacy.name,'광주 재규어스');assert.equal(legacy.budget,123);assert.equal(legacy.wins,9);
+  assert.equal(out.find(t=>t.id===88).name,'내가 지은 구단');
+  assert.equal(new Set(out.map(t=>t.code)).size,10);
+  assert.ok(out.filter(t=>![73,88].includes(t.id)).every(t=>t.id===undefined));
+});
+
+test('GM 연도와 후보 복사는 졸업·연도 일치 조건을 검사하고 원본을 유지한다',()=>{
+  const source=gmCareer(),before=structuredClone(source);
+  const result=gmWorld.prepareGMWorld({id:1,year:2026,currentStage:'RegularSeason'},2029,2,source);
+  assert.deepEqual(source,before);
+  assert.equal(result.season.year,2029);assert.ok(result.season.currentDate.startsWith('2029-'));assert.equal(result.season.sourceCareerId,7);
+  assert.equal(result.prospect.id,undefined);assert.equal(result.prospect.teamId,undefined);assert.equal(result.prospect.status,'DraftProspect');
+  assert.deepEqual(result.prospect.relationships,source.relationships);assert.deepEqual(result.prospect.matchRecords,source.matchRecords);
+  result.prospect.careerJourney.trainingGrowth.contact=0;assert.equal(source.careerJourney.trainingGrowth.contact,9);
+  assert.throws(()=>gmWorld.prepareGMWorld({setupCompleted:true},2029,2,source),/이미 시작/);
+  assert.throws(()=>gmWorld.prepareGMWorld({},2028,2,source),/연도/);
+  assert.throws(()=>gmWorld.prepareGMWorld({},2029,2,{...source,careerEndedAt:undefined}),/졸업/);
+  assert.throws(()=>gmWorld.prepareGMWorld({},2025,2),/연도/);
+});
+
+test('GM 초기화는 기존 프로·육성·시즌 저장을 보존하고 반복해도 선수를 추가하지 않는다',async()=>{
+  const module=require(path.join(dir,'db.js')),previous=module.db;
+  const career=gmCareer(),pro={...gmCareer(),id:500,status:'Pro',teamId:73,salary:999};
+  const season={id:1,year:2028,currentDate:'2028-05-01',currentStage:'RegularSeason'};
+  const mem=gmMemory({teams:[{id:73,name:'Seoul Tigers',city:'Seoul',budget:123,fanBase:50,wins:9}],players:[career,pro],leagueSeasons:[season]});
+  module.db=mem.db;
+  try{
+    await module.initDummyDataIfNeeded();const once=mem.snapshot();await module.initDummyDataIfNeeded();
+    assert.deepEqual(mem.snapshot(),once);
+    assert.deepEqual(once.players.find(p=>p.id===7),career);assert.deepEqual(once.players.find(p=>p.id===500),pro);
+    assert.deepEqual(once.leagueSeasons,[season]);assert.equal(once.teams.length,10);
+    assert.equal(new Set(once.players.map(p=>p.id)).size,once.players.length);
+  }finally{module.db=previous;}
+});
+
+test('GM 후보 연결은 저장 실패 시 롤백하고 재접속·중복 요청에서 한 명만 보존한다',async()=>{
+  const module=require(path.join(dir,'db.js')),previous=module.db;
+  const {buildDefaultProTeams}=require(path.join(dir,'data/proClubs.js'));
+  const {useProLeagueStore:store}=require(path.join(dir,'store/proLeagueStore.js'));
+  const source=gmCareer();
+  const mem=gmMemory({teams:buildDefaultProTeams(),players:[source],leagueSeasons:[{id:1,year:2026,currentStage:'RegularSeason',setupCompleted:false}]});module.db=mem.db;
+  try{
+    await store.getState().loadLeague();assert.equal(store.getState().careerCandidates.length,1);
+    mem.fail();const before=mem.snapshot();await assert.rejects(store.getState().startWorld(2029,1,7),/GM save failed/);
+    assert.deepEqual(mem.snapshot(),before);assert.equal(store.getState().season.setupCompleted,false);assert.equal(store.getState().isLoading,false);
+    await store.getState().startWorld(2029,1,7);
+    assert.equal(mem.snapshot().players.filter(p=>p.status==='DraftProspect').length,1);
+    assert.deepEqual(mem.snapshot().players.find(p=>p.id===7),source);
+    await store.getState().loadLeague();assert.equal(store.getState().draftProspects.length,1);assert.equal(store.getState().season.year,2029);
+    await assert.rejects(store.getState().startWorld(2029,1,7),/이미 시작/);
+    assert.equal(mem.snapshot().players.filter(p=>p.status==='DraftProspect').length,1);
+  }finally{module.db=previous;}
+});
+
+test('GM 독립 시작은 육성 후보를 자동 이관하지 않고 기존 진행 시즌을 다시 설정하지 않는다',async()=>{
+  const module=require(path.join(dir,'db.js')),previous=module.db;
+  const {buildDefaultProTeams}=require(path.join(dir,'data/proClubs.js'));
+  const {useProLeagueStore:store}=require(path.join(dir,'store/proLeagueStore.js'));
+  const teams=buildDefaultProTeams();
+  const mem=gmMemory({teams,players:[gmCareer()],leagueSeasons:[{id:1,year:2026,currentStage:'RegularSeason',setupCompleted:false}]});module.db=mem.db;
+  try{
+    await store.getState().loadLeague();await store.getState().startWorld(2027,2);
+    assert.equal(mem.snapshot().players.filter(p=>p.status==='DraftProspect').length,0);assert.equal(store.getState().season.sourceCareerId,undefined);
+    assert.equal(store.getState().season.year,2027);assert.equal(store.getState().season.userTeamId,2);
+    const old=gmMemory({teams:teams.map((t,i)=>({...t,wins:i===0?1:0})),players:[],leagueSeasons:[{id:1,year:2028,currentDate:'2028-05-01',currentStage:'RegularSeason'}]});module.db=old.db;
+    await store.getState().loadLeague();assert.equal(store.getState().season.setupCompleted,true);assert.equal(store.getState().currentDateStr,'2028-05-01');
+  }finally{module.db=previous;}
+});
+
+test('GM 이름 편집은 ID·기록 보존, 재접속, 원래 이름으로 수정, 저장 실패를 처리한다',async()=>{
+  const module=require(path.join(dir,'db.js')),previous=module.db;
+  const {buildDefaultProTeams}=require(path.join(dir,'data/proClubs.js'));
+  const {useProLeagueStore:store}=require(path.join(dir,'store/proLeagueStore.js'));
+  const mem=gmMemory({teams:buildDefaultProTeams(),players:[gmCareer()],leagueSeasons:[{id:1,year:2026,currentStage:'RegularSeason',setupCompleted:false}]});module.db=mem.db;
+  try{
+    await store.getState().loadLeague();await store.getState().startWorld(2029,1,7);
+    const original=mem.snapshot(),pro=store.getState().players[0],candidate=store.getState().draftProspects[0];
+    const put=mem.db.teams.put;mem.db.teams.put=async()=>{throw Error('rename save failed');};
+    await assert.rejects(store.getState().renameTeam(1,'서울 테스트','테스트','테스트 파크'),/rename save failed/);
+    assert.deepEqual(mem.snapshot(),original);assert.equal(store.getState().teams[0].name,original.teams[0].name);assert.equal(store.getState().isLoading,false);mem.db.teams.put=put;
+    await store.getState().renameTeam(1,' 서울 트윈즈 ','트윈즈','내 구장');
+    await store.getState().renamePlayer(pro.id,' 우리 에이스 ');
+    await store.getState().renamePlayer(candidate.id,'연결 후보');
+    await store.getState().loadLeague();
+    const saved=mem.snapshot();
+    assert.equal(store.getState().teams[0].name,'서울 트윈즈');assert.equal(store.getState().teams[0].customName,true);
+    assert.deepEqual(saved.teams[0],{...original.teams[0],name:'서울 트윈즈',shortName:'트윈즈',venue:'내 구장',customName:true});
+    assert.deepEqual(saved.players.find(p=>p.id===pro.id),{...original.players.find(p=>p.id===pro.id),name:'우리 에이스'});
+    assert.equal(saved.players.find(p=>p.id===candidate.id).name,'연결 후보');assert.deepEqual(saved.players.find(p=>p.id===7),gmCareer());
+    await assert.rejects(store.getState().renamePlayer(7,'원본 변경'),/GM 선수/);
+    await assert.rejects(store.getState().renamePlayer(pro.id,'  '),/선수명/);
+    await assert.rejects(store.getState().renameTeam(1,'a'.repeat(41),'약칭','구장'),/구단명/);
+    store.setState({inGameMatch:{}});await assert.rejects(store.getState().renamePlayer(pro.id,'경기 중 수정'),/경기/);store.setState({inGameMatch:null});
+  }finally{store.setState({inGameMatch:null});module.db=previous;}
 });

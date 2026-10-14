@@ -4,7 +4,8 @@ import { db } from '../db';
 import { getSavedCareers, getCareerRoute } from '../data/savedCareers';
 import { POSITION_LABELS } from '../types';
 import { GAME_VERSION } from '../version';
-import { Diamond, Shield, UserPlus, ArrowUpRight } from 'lucide-react';
+import { Diamond, Shield, UserPlus, ArrowUpRight, Upload } from 'lucide-react';
+import { parseSaveExport } from '../data/saveExport';
 import { useNavigate } from 'react-router-dom';
 import '../index.css';
 import './TitleScreen.css';
@@ -29,7 +30,37 @@ export default function TitleScreen() {
         <h1 className="title-text">Diamond GM</h1>
         <h2 className="title-journal-headline">한 번의 스윙보다,<br />매일의 선택이 나를 만든다.</h2>
         <p className="title-subtitle">처음 유니폼을 입는 날부터 마지막 고교 경기까지.<br />경기와 훈련, 친구들과 함께 나만의 야구 일지를 써보세요.</p>
-        <button className="btn btn-primary title-primary-action" onClick={() => navigate('/development/create')}><UserPlus size={20} aria-hidden="true" /> 새 선수로 입학하기<ArrowUpRight size={20} aria-hidden="true" /></button>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '16px' }}>
+          <button className="btn btn-primary title-primary-action" onClick={() => navigate('/development/create')}>
+            <UserPlus size={20} aria-hidden="true" /> 새 선수로 입학하기<ArrowUpRight size={20} aria-hidden="true" />
+          </button>
+          <button className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={() => document.getElementById('title-import-file')?.click()}>
+            <Upload size={18} aria-hidden="true" /> 세이브 파일 불러오기
+          </button>
+          <input
+            id="title-import-file"
+            type="file"
+            accept=".json"
+            style={{ display: 'none' }}
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              try {
+                const text = await file.text();
+                const imported = parseSaveExport(text);
+                delete imported.id;
+                const newId = await db.players.add(imported);
+                imported.id = newId;
+                setAttempt(n => n + 1);
+                navigate(getCareerRoute(imported));
+              } catch (err) {
+                alert(err instanceof Error ? err.message : '세이브 파일을 불러오지 못했습니다.');
+              } finally {
+                e.target.value = '';
+              }
+            }}
+          />
+        </div>
         <div className="title-journal-facts"><span><strong>91</strong>개의 고교 야구부</span><span><strong>3</strong>년의 선수 생활</span><span><strong>나</strong>만의 성장 기록</span></div>
         </section><div className="title-player-cover" aria-hidden="true"><div className="cover-diamond" /><span className="cover-label">YOUR NEXT CHAPTER</span><img src={`${import.meta.env.BASE_URL}assets/portraits/male-spiky-v19.webp`} alt="" /><strong>PLAY.<br />GROW.<br />BELONG.</strong><span className="cover-caption">그라운드에서 시작하는 나의 이야기</span></div></div>
         {loadError && <p role="alert">{loadError} <button className="btn btn-secondary" onClick={() => setAttempt(n => n + 1)}>다시 불러오기</button></p>}
@@ -41,8 +72,8 @@ export default function TitleScreen() {
             onClick={() => navigate('/management')}
           >
             <Shield size={24} color="var(--primary)" className="mode-icon" aria-hidden="true" />
-            <h2>구단 운영 모드 · 미리보기</h2>
-            <p>구단 화면의 기초를 둘러볼 수 있습니다. 드래프트·트레이드와 육성 선수 연동은 후속 개발 예정입니다.</p>
+            <h2>구단 운영 (GM 모드)</h2>
+            <p>GM 초안 · 구단과 세계 연도를 선택하고 육성 선수 연결 여부를 결정합니다. 경기·로스터 운영 기반을 단계별로 확장합니다.</p>
           </button>
         </div>
       </div>
