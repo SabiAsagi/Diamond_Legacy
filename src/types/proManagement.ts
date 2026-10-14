@@ -66,6 +66,10 @@ export interface InGamePlayLog {
 }
 
 export interface InGameMatchState {
+  gmLineups?: {home:number[];away:number[]};
+  gmPitchers?: {home:number;away:number};
+  gmParticipants?: number[];
+  gmUsed?: number[];
   matchId: string;
   dateStr: string;
   homeTeamName: string;

@@ -126,11 +126,24 @@ export interface Player {
 
   // 프로 구단 관리 & GM 모드 필드
   proStats?: import('./proManagement').ProPlayerStats;
-  rosterTier?: '1군' | '2군';
+  rosterTier?: '1군' | '2군' | '3군';
   salary?: number; // 연봉 (만원 단위)
   contractYears?: number; // 잔여 계약 기간
   draftSourceCareerId?: number;
   draftClassYear?: number;
+  gm?: {
+    fatigue: number;
+    injuryUntil?: string;
+    training: 'balanced' | 'hitting' | 'pitching' | 'fielding';
+    futuresTeamId?: number;
+    recallAfter?: string;
+    futuresStats?: import('./proManagement').ProPlayerStats;
+    postseasonStats?: import('./proManagement').ProPlayerStats;
+    registration?: 'registered' | 'development';
+    developmentSignedYear?:number;
+    releasedInYear?:number;
+    seasonHistory?: { year:number; teamId?:number; stats:import('./proManagement').ProPlayerStats }[];
+  };
 }
 
 export interface Team {
@@ -168,6 +181,7 @@ export interface Team {
 }
 
 export interface LeagueSeason {
+  office?: import('../data/gmOperations').GMOffice;
   setupCompleted?: boolean;
   sourceCareerId?: number;
   id?: number;

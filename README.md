@@ -1,8 +1,8 @@
 <div align="center">
 
-# ⚾ Diamond GM
+# ⚾ Diamond Legacy
 
-### 고교야구 선수 육성 시뮬레이션
+### 고교 선수 육성 · KBO 구단 운영 시뮬레이션
 
 **평범한 고1 야구부원에서 프로 지명까지.**<br>
 하루 세 번의 선택이 3년 뒤의 나를 만듭니다.
@@ -11,9 +11,9 @@
 
 [![지금 플레이](https://img.shields.io/badge/▶_지금_플레이-브라우저에서_바로_시작-10b981?style=for-the-badge)](https://sabiasagi.github.io/Diamond_GM/)
 
-![버전](https://img.shields.io/badge/버전-2.2.1-3b82f6?style=flat-square)
-![플랫폼](https://img.shields.io/badge/플랫폼-웹%20·%20모바일-f59e0b?style=flat-square)
-![저장](https://img.shields.io/badge/저장-브라우저_자동_저장-64748b?style=flat-square)
+![버전](https://img.shields.io/badge/버전-2.3.0-3b82f6?style=flat-square)
+![플랫폼](https://img.shields.io/badge/플랫폼-Windows%20·%20Steam_출시_목표-f59e0b?style=flat-square)
+![저장](https://img.shields.io/badge/저장-로컬_자동_저장-64748b?style=flat-square)
 
 <br>
 
@@ -204,3 +204,13 @@ tests/                 node:test 테스트
 <div align="center">
 <sub>⚾ 제작: <a href="https://github.com/SabiAsagi">SabiAsagi</a></sub>
 </div>
+
+## 2.3.0 PC 게임 개발
+
+출시 목표는 Steam용 Windows PC 게임입니다. 기존 브라우저 링크는 개발용 미리보기입니다.
+
+- `npm run desktop`: 데스크톱 실행
+- `npm run build:steam`: Windows 실행 패키지 폴더 생성
+- `npm run build:windows`: 휴대용 실행 파일 생성
+
+GM 운영실에서 계약·트레이드·드래프트·퓨처스·3군·육성선수와 라인업을 관리합니다. 해외 리그·외국인 영입·아시아 쿼터와 자체 뷰어는 후속 단계입니다. 구현 범위·공식 참고자료·단순화된 규칙은 [2.3.0 문서](docs/v2.3.0-kbo-operations.md)를 참고하세요. 기존 브라우저 저장과 앱 저장은 별개입니다.

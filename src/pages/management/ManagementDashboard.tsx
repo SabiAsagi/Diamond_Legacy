@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { GMWorldSetup } from '../../components/management/GMWorldSetup';
 import { GMNameEditor } from '../../components/management/GMNameEditor';
 import { useProLeagueStore } from '../../store/proLeagueStore';
-import { getProFixtures } from '../../data/proSchedule';
+import { gmFixtures } from '../../data/gmSeason';
+import { Link } from 'react-router-dom';
+import { payroll } from '../../data/gmOperations';
 import { InGameMatchModal } from '../../components/management/InGameMatchModal';
 import { 
   Shield, 
@@ -24,6 +26,8 @@ export default function ManagementDashboard() {
   const [nameEditor,setNameEditor] = useState(false);
   const { 
     teams, 
+    players,
+    initializeGM,
     season, 
     standings, 
     recentBoxscores, 
@@ -44,10 +48,13 @@ export default function ManagementDashboard() {
   } = useProLeagueStore();
 
   useEffect(() => {
-    loadLeague().catch(() => setLoadError('GM 저장을 불러오지 못했습니다. 다시 시도해주세요.'));
+    if(!useProLeagueStore.getState().season) loadLeague().catch(() => setLoadError('GM 저장을 불러오지 못했습니다. 다시 시도해주세요.'));
   }, [loadLeague]);
 
-  if (loadError) return <section className="glass-panel gm-world-setup"><p role="alert">{loadError}</p><button className="btn btn-primary" onClick={() => { setLoadError(''); loadLeague().catch(() => setLoadError('GM 저장을 불러오지 못했습니다. 다시 시도해주세요.')); }}>다시 불러오기</button></section>;
+  const ready=season?.setupCompleted,initialized=season?.office?.initialized;
+  useEffect(()=>{if(ready&&!initialized)void initializeGM().catch(e=>setLoadError(String(e)));},[ready,initialized,initializeGM]);
+  const action=async(fn:()=>void|Promise<void>)=>{try{await fn();setLoadError('');}catch(e){setLoadError(e instanceof Error?e.message:String(e));}};
+  if (loadError && !season) return <section className="glass-panel gm-world-setup"><p role="alert">{loadError}</p><button className="btn btn-primary" onClick={() => { setLoadError(''); loadLeague().catch(() => setLoadError('GM 저장을 불러오지 못했습니다. 다시 시도해주세요.')); }}>다시 불러오기</button></section>;
   if (!season) return <p role="status">GM 세계를 불러오는 중…</p>;
   if (!season.setupCompleted) return <GMWorldSetup />;
 
@@ -55,14 +62,17 @@ export default function ManagementDashboard() {
   const userStanding = standings.find(s => s.teamId === userTeam?.id);
 
   // 오늘 일정 매치업
-  const todayFixtures = season ? getProFixtures(season.year).filter(f => f.date === currentDateStr && !f.cancelled) : [];
+  const todayFixtures = season ? gmFixtures(season).map(f=>({...f,home:teams.find(t=>t.id===Number(f.home))?.code??f.home,away:teams.find(t=>t.id===Number(f.away))?.code??f.away})) : [];
   const userFixture = todayFixtures.find(f => f.home === userTeam?.code || f.away === userTeam?.code);
 
   return (
     <div className="management-dashboard-container animate-fade-in">
+      <Link className="btn btn-primary" to="/management/office">구단 운영실 · 계약·트레이드·드래프트·퓨처스</Link>
+      {loadError && <p role="alert">{loadError}</p>}
       <button className="btn btn-secondary" aria-expanded={nameEditor} onClick={()=>setNameEditor(v=>!v)}>{nameEditor?'이름 편집 닫기':'구단·선수 이름 편집'}</button>
       {nameEditor && <GMNameEditor />}
-      {draftProspects.length > 0 && <section className="glass-panel" style={{padding:'20px'}}><h2>연결된 드래프트 후보</h2><p>선수 육성에서 연결한 후보입니다. 실제 지명은 다음 개발 단계에서 진행합니다.</p><ul>{draftProspects.map(p => <li key={p.id}>{p.name} · {p.highSchool} · {p.draftClassYear}년 후보</li>)}</ul></section>}
+      {draftProspects.some(p=>p.draftSourceCareerId!==undefined) && <section className="glass-panel" style={{padding:'20px'}}><h2>연결된 드래프트 후보</h2><p>선수 육성에서 연결한 후보입니다. 운영실의 신인 드래프트에서 지명할 수 있습니다.</p><ul>{draftProspects.filter(p=>p.draftSourceCareerId!==undefined).map(p => <li key={p.id}>{p.name} · {p.highSchool} · {p.draftClassYear}년 후보</li>)}</ul></section>}
+      {['Draft','Offseason'].includes(season.currentStage) && <section className="glass-panel"><p>{season.currentStage==='Draft'?'시즌이 끝났습니다. 운영실에서 신인 지명을 진행해주세요.':'비시즌입니다. 계약과 선수단을 정리한 뒤 운영실에서 다음 시즌을 시작해주세요.'}</p></section>}
       {/* 1. 상단 내 구단 헤더 */}
       {userTeam && (
         <section className="club-header-panel glass-panel">
@@ -85,7 +95,7 @@ export default function ManagementDashboard() {
               </div>
               <h1 className="club-headline">{userTeam.name}</h1>
               <p className="club-subline">
-                단장 집무실 · {season?.year ?? 2026}시즌 KBO 정규리그
+                단장 집무실 · {season?.year ?? 2026}시즌 · {season.currentStage}
               </p>
             </div>
           </div>
@@ -100,8 +110,8 @@ export default function ManagementDashboard() {
             </div>
             <div className="stat-card">
               <span className="stat-label"><Coins size={14} /> 잔여 예산</span>
-              <span className="stat-value">{(userTeam.budget / 100000000).toFixed(1)}억원</span>
-              <span className="stat-sub">총 연봉 {(userTeam.payroll ? userTeam.payroll / 100000000 : 50).toFixed(1)}억</span>
+              <span className="stat-value">{((userTeam.budget-payroll(userTeam.id!,players,season)) / 100000000).toFixed(1)}억원</span>
+              <span className="stat-sub">총 연봉 {(payroll(userTeam.id!,players,season) / 100000000).toFixed(1)}억</span>
             </div>
             <div className="stat-card">
               <span className="stat-label"><Users size={14} /> 팬 지지도</span>
@@ -124,30 +134,30 @@ export default function ManagementDashboard() {
           {userFixture && (
             <button 
               className="btn btn-primary btn-ootp-live"
-              onClick={startInGameMatch}
-              disabled={isLoading}
+              onClick={()=>void action(startInGameMatch)}
+              disabled={isLoading||!!inGameMatch||['Draft','Offseason'].includes(season.currentStage)}
             >
-              <Zap size={18} /> 실시간 경기 지휘 (OOTP 전술 개입)
+              <Zap size={18} /> 실시간 경기 지휘
             </button>
           )}
           <button 
             className="btn btn-secondary" 
-            onClick={() => void simulateDay()}
-            disabled={isLoading}
+            onClick={() => void action(simulateDay)}
+            disabled={isLoading||!!inGameMatch||['Draft','Offseason'].includes(season.currentStage)}
           >
             <Play size={16} /> 오늘 경기 시뮬레이션
           </button>
           <button 
             className="btn btn-secondary" 
-            onClick={() => void simulateToNextUserMatch()}
-            disabled={isLoading}
+            onClick={() => void action(simulateToNextUserMatch)}
+            disabled={isLoading||!!inGameMatch||['Draft','Offseason'].includes(season.currentStage)}
           >
             <ArrowRight size={16} /> 다음 우리 경기까지 진행
           </button>
           <button 
             className="btn btn-outline" 
-            onClick={() => void simulateDays(7)}
-            disabled={isLoading}
+            onClick={() => void action(()=>simulateDays(7))}
+            disabled={isLoading||!!inGameMatch||['Draft','Offseason'].includes(season.currentStage)}
           >
             <FastForward size={16} /> 1주일 일괄 진행
           </button>
@@ -188,7 +198,7 @@ export default function ManagementDashboard() {
                     <div className="fixture-footer">
                       <button 
                         className="btn btn-sm btn-primary w-full"
-                        onClick={startInGameMatch}
+                        onClick={()=>void action(startInGameMatch)}
                       >
                         <Zap size={14} /> 직접 지휘하기
                       </button>
@@ -272,7 +282,7 @@ export default function ManagementDashboard() {
           onTacticalAction={executeTacticalAction}
           onStepHalfInning={stepHalfInning}
           onFinishSimulate={finishLiveGameSimulate}
-          onClose={closeLiveGame}
+          onClose={()=>void action(closeLiveGame)}
         />
       )}
     </div>

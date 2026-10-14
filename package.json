@@ -1,7 +1,7 @@
 {
-  "name": "diamond-gm",
+  "name": "diamond-legacy",
   "private": true,
-  "version": "2.2.1",
+  "version": "2.3.0",
   "type": "module",
   "scripts": {
     "dev": "npm run kits && vite",
@@ -10,7 +10,11 @@
     "preview": "vite preview",
     "test": "npm run kits && node --test tests/career.cjs tests/v2_features.cjs tests/freshman_year.cjs",
     "test:freshman": "node --test tests/freshman_year.cjs",
-    "kits": "node scripts/build-school-kits.mjs"
+    "kits": "node scripts/build-school-kits.mjs",
+    "build:desktop-assets": "npm run kits && tsc -b && vite build --base=./",
+    "desktop": "npm run build:desktop-assets && electron .",
+    "build:steam": "npm run build:desktop-assets && node scripts/build-desktop.cjs dir",
+    "build:windows": "npm run build:desktop-assets && node scripts/build-desktop.cjs portable"
   },
   "dependencies": {
     "dexie": "^4.4.5",
@@ -26,9 +30,33 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3",
     "oxlint": "^1.79.0",
     "sharp": "^0.35.5",
     "typescript": "~6.0.2",
     "vite": "^8.2.2"
+  },
+  "main": "desktop/main.cjs",
+  "description": "Diamond Legacy — 한국 야구 선수 육성과 구단 운영 시뮬레이션",
+  "author": "SabiAsagi",
+  "build": {
+    "appId": "com.sabiasagi.diamondlegacy",
+    "productName": "Diamond Legacy",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "dir"
+      ],
+      "artifactName": "Diamond-Legacy-${version}-${arch}.${ext}",
+      "signAndEditExecutable": false
+    }
   }
 }

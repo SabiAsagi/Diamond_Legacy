@@ -29,3 +29,6 @@ public/assets/school-kits/
 .env
 .env.*
 !.env.example
+
+# Desktop build outputs
+release/

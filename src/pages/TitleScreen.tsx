@@ -27,7 +27,7 @@ export default function TitleScreen() {
       <div className="title-content animate-fade-in">
         <div className="title-journal-label"><Diamond size={24} aria-hidden="true" /> THE PLAYER'S JOURNEY <span>v{GAME_VERSION}</span></div>
         <div className="title-journal-grid"><section className="title-journal-intro">
-        <h1 className="title-text">Diamond GM</h1>
+        <h1 className="title-text">Diamond Legacy</h1>
         <h2 className="title-journal-headline">한 번의 스윙보다,<br />매일의 선택이 나를 만든다.</h2>
         <p className="title-subtitle">처음 유니폼을 입는 날부터 마지막 고교 경기까지.<br />경기와 훈련, 친구들과 함께 나만의 야구 일지를 써보세요.</p>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '16px' }}>

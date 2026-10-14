@@ -9,6 +9,7 @@ import DevelopmentDashboard from './pages/development/DevelopmentDashboard';
 import ManagementDashboard from './pages/management/ManagementDashboard';
 import ManagementRoster from './pages/management/ManagementRoster';
 import ManagementLeague from './pages/management/ManagementLeague';
+import ManagementOffice from './pages/management/ManagementOffice';
 
 export default function App() {
   useEffect(() => {
@@ -30,6 +31,7 @@ export default function App() {
           <Route index element={<ManagementDashboard />} />
           <Route path="roster" element={<ManagementRoster />} />
           <Route path="league" element={<ManagementLeague />} />
+          <Route path="office" element={<ManagementOffice />} />
         </Route>
       </Routes>
     </HashRouter>
