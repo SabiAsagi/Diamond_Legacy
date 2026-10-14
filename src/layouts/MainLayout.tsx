@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { LayoutDashboard, Users, Trophy, Settings } from 'lucide-react';
+import { LayoutDashboard, Users, Trophy, Home } from 'lucide-react';
 import '../index.css';
 
 const Sidebar = () => (
@@ -22,10 +22,10 @@ const Sidebar = () => (
         리그 순위
       </NavLink>
       <div style={{ flex: 1 }}></div>
-      <div className="nav-item" style={{ cursor: 'pointer', marginTop: 'auto', marginBottom: '24px' }}>
-        <Settings size={20} />
-        환경 설정
-      </div>
+      <NavLink to="/" className="nav-item" style={{ marginTop: 'auto', marginBottom: '16px' }}>
+        <Home size={20} />
+        타이틀 화면
+      </NavLink>
     </nav>
   </aside>
 );

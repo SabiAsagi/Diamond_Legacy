@@ -1,0 +1,12 @@
+.gm-world-setup { width: min(720px,100%); margin: 24px auto; padding: clamp(20px,4vw,36px); box-sizing:border-box; }
+.gm-world-setup h1 { font-size:clamp(24px,4vw,32px); line-height:1.35; }
+.gm-world-setup p { line-height:1.65; }
+.gm-world-setup form { display:grid; gap:20px; }
+.gm-world-setup label { display:grid; gap:8px; font-size:16px; }
+.gm-world-setup select,.gm-world-setup input:not([type=radio]) { min-height:44px; width:100%; min-width:0; box-sizing:border-box; padding:10px; border:1px solid var(--border-color,#b3bdc6); border-radius:8px; color:var(--text-primary); background:var(--bg-panel,#fff); font-size:16px; }
+.gm-world-setup fieldset { display:grid; gap:12px; margin:0; padding:16px; border:1px solid var(--border-color,#b3bdc6); border-radius:12px; min-width:0; }
+.gm-world-setup .gm-radio { display:flex; align-items:center; gap:10px; min-height:44px; }
+.gm-world-setup input[type=radio] { width:20px; height:20px; flex-shrink:0; }
+.gm-world-setup button { min-height:48px; white-space:normal; }
+.gm-world-setup [role=alert] { color:var(--danger,#bd3e21); }
+.gm-world-setup :focus-visible { outline:3px solid var(--primary,#bd4b1b); outline-offset:3px; }

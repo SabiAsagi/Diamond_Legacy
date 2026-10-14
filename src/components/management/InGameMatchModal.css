@@ -1,0 +1,403 @@
+.in-game-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(5, 10, 20, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.in-game-modal-container {
+  width: 100%;
+  max-width: 960px;
+  max-height: 94vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(10, 15, 30, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  color: #f1f5f9;
+}
+
+/* 상단 전광판 스코어보드 */
+.scoreboard-panel {
+  background: #090d16;
+  padding: 14px 20px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.08);
+}
+
+.scoreboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.stadium-tag {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.inning-indicator-badge {
+  background: #dc2626;
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  box-shadow: 0 0 10px rgba(220, 38, 38, 0.5);
+}
+
+.scoreboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: monospace, sans-serif;
+  text-align: center;
+}
+
+.scoreboard-table th {
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  color: #64748b;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.scoreboard-table td {
+  padding: 6px 8px;
+  font-size: 0.95rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.scoreboard-table .team-cell {
+  text-align: left;
+  font-family: inherit;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.my-team-pill {
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.active-batting-row {
+  background: rgba(37, 99, 235, 0.15);
+}
+
+.score-cell {
+  color: #38bdf8;
+  font-weight: 800;
+  font-size: 1.15rem !important;
+}
+
+/* 필드 및 매치업 영역 */
+.game-field-row {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 16px;
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 768px) {
+  .game-field-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 다이아몬드 필드 */
+.diamond-field-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 12px;
+}
+
+.diamond-wrapper {
+  width: 140px;
+  height: 140px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diamond-shape {
+  width: 90px;
+  height: 90px;
+  border: 2px dashed rgba(255, 255, 255, 0.25);
+  transform: rotate(45deg);
+  position: relative;
+}
+
+.base {
+  width: 22px;
+  height: 22px;
+  background: #334155;
+  border: 2px solid #94a3b8;
+  border-radius: 4px;
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(-45deg);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #cbd5e1;
+  transition: all 0.2s ease;
+}
+
+.base.occupied {
+  background: #eab308;
+  border-color: #fef08a;
+  color: #000;
+  box-shadow: 0 0 12px #eab308;
+}
+
+.base-home { bottom: -11px; right: -11px; background: #64748b; }
+.base-1b   { top: -11px; right: -11px; }
+.base-2b   { top: -11px; left: -11px; }
+.base-3b   { bottom: -11px; left: -11px; }
+
+/* 볼카운트 판 */
+.count-board {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  background: #090d16;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.count-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.count-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #94a3b8;
+  width: 12px;
+}
+
+.count-lamp {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #1e293b;
+  border: 1px solid #334155;
+}
+
+.count-lamp.ball.on { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+.count-lamp.strike.on { background: #eab308; box-shadow: 0 0 8px #eab308; }
+.count-lamp.out.on { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+
+/* 매치업 카드 */
+.matchup-card {
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 12px;
+}
+
+.matchup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.matchup-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #f8fafc;
+}
+
+.team-role-tag {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #38bdf8;
+}
+
+.matchup-details {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 12px;
+}
+
+.player-matchup-box {
+  flex: 1;
+  background: rgba(30, 41, 59, 0.7);
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.player-matchup-box h4 {
+  margin: 4px 0 8px 0;
+  font-size: 1.15rem;
+  color: #fff;
+}
+
+.role-sub {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.player-stat-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: #cbd5e1;
+}
+
+.vs-badge {
+  font-weight: 900;
+  font-size: 1.1rem;
+  color: #f59e0b;
+}
+
+.runners-summary-row {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.85rem;
+  display: flex;
+  gap: 8px;
+}
+
+/* 문자 중계 박스 */
+.live-broadcast-box {
+  flex: 1;
+  min-height: 180px;
+  max-height: 240px;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px;
+  background: rgba(9, 13, 22, 0.8);
+  overflow: hidden;
+}
+
+.broadcast-header h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+.broadcast-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 6px;
+}
+
+.broadcast-line {
+  font-size: 0.9rem;
+  display: flex;
+  gap: 10px;
+  line-height: 1.4;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+
+.broadcast-line.score-highlight {
+  background: rgba(234, 179, 8, 0.15);
+  border-left: 3px solid #eab308;
+  font-weight: 700;
+  color: #fef08a;
+}
+
+.log-inning-tag {
+  color: #38bdf8;
+  font-weight: 700;
+  font-size: 0.8rem;
+  min-width: 44px;
+}
+
+.log-text {
+  color: #e2e8f0;
+}
+
+/* 하단 OOTP 전술 개입 바 */
+.tactical-action-bar {
+  padding: 14px 18px;
+  background: #090d16;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.tactical-commands-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.action-group-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #94a3b8;
+  margin-right: 4px;
+}
+
+.btn-tactical {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sim-speed-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.game-over-actions {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.game-over-msg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #34d399;
+}

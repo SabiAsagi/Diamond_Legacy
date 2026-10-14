@@ -1,0 +1,184 @@
+.management-league-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.league-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.9));
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.league-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.league-title-row h1 {
+  margin: 0;
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.league-subtitle {
+  margin: 4px 0 0 0;
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+.league-tabs {
+  display: flex;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* KBO 순위표 테이블 */
+.standings-table-card {
+  overflow-x: auto;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 0;
+}
+
+.kbo-standings-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: center;
+  font-size: 0.9rem;
+  min-width: 900px;
+}
+
+.kbo-standings-table th {
+  padding: 12px 14px;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 15, 28, 0.4);
+}
+
+.kbo-standings-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.kbo-standings-table .team-head,
+.kbo-standings-table .team-name-cell {
+  text-align: left;
+}
+
+.team-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.my-team-row {
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.my-label {
+  background: #0284c7;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.postseason-pill {
+  background: #f59e0b;
+  color: #000;
+  font-weight: 800;
+  font-size: 0.75rem;
+  padding: 2px 7px;
+  border-radius: 50%;
+}
+
+.text-win { color: #34d399; }
+.text-loss { color: #f87171; }
+.font-bold { font-weight: 700; }
+
+.standings-footer-note {
+  padding: 12px 20px;
+  font-size: 0.8rem;
+  color: #64748b;
+  text-align: right;
+}
+
+/* 리더보드 그리드 */
+.leaderboards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.leader-card {
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.leader-card h4 {
+  margin: 0 0 14px 0;
+  font-size: 1.05rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f1f5f9;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 10px;
+}
+
+.leader-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.leader-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(30, 41, 59, 0.4);
+}
+
+.leader-rank {
+  width: 22px;
+  font-weight: 800;
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.leader-name {
+  flex: 1;
+  font-weight: 700;
+  color: #fff;
+}
+
+.leader-pos {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-right: 12px;
+}
+
+.leader-val {
+  font-size: 0.95rem;
+}
